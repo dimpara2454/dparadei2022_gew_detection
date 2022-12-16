@@ -1,1 +1,1 @@
-# dparadei2022_gew_tetection
+# dparadei2022_gew_detection
