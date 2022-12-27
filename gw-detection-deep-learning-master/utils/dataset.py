@@ -477,3 +477,84 @@ class SlicerDatasetSNR(Dataset):
             return torch.from_numpy(sample).to(dtype=torch.float32), \
                    torch.from_numpy(label).to(dtype=torch.float32)
 
+
+class SlicerDataset7(Dataset):
+    def __init__(self, background_hdf, injections_npy, slice_len=int(3.25 * 2048), slice_stride=int(2.5 * 2048),
+                 max_seg_idx=3, s_min=1., s_max=1., return_time=True, return_wave=False, return_bg=False):
+        self.slicer = Slicer(background_hdf, step_size=slice_stride, window_size=slice_len)
+        self.n_slices = len(self.slicer)
+        self.waves = np.load(injections_npy, mmap_mode='r')
+        self.n_waves = self.waves.shape[0]
+        self.wave_indices = np.random.choice(self.n_waves, self.n_slices, replace=True)
+        self.s_min = s_min
+        self.s_max = s_max
+        self.return_time = return_time
+        self.return_wave = return_wave
+        self.return_bg = return_bg
+        self.slice_len = slice_len
+
+        print(f'Using {self.n_slices} background segments and {self.n_waves} waveforms...')
+        print(f'Total n_samples: {self.n_slices * 2}')
+
+        self.rel_inj_t = np.round(np.random.uniform(0.5, 0.7, self.n_slices), 3) + 0.125
+        # self.injection_times = np.round(np.random.uniform(0, max_seg_idx - 1, self.n_slices), 1) + self.rel_inj_t
+        self.injection_times = np.random.randint(0, max_seg_idx - 1, self.n_slices) + self.rel_inj_t
+        print(self.injection_times)
+
+    def __len__(self):
+        return self.n_slices * 2
+
+    def set_scale_range(self, s_min, s_max):
+        print(f'Updating scale range to ({s_min}, {s_max})')
+        self.s_min = s_min
+        self.s_max = s_max
+
+    def __getitem__(self, item):
+        if item < self.n_slices:
+            noise = self.slicer[item][0, :, :].copy()
+            wave = self.waves[self.wave_indices[item]].copy()
+
+            tc_diff = 7. - self.injection_times[item]
+            abs_inj_time = self.injection_times[item]
+            inj_time = self.rel_inj_t[item]
+
+            # crop or prepend zeros
+            if tc_diff > 0:
+                idx_start = int(tc_diff * 2048)
+                wave = wave[:, idx_start:]
+            else:
+                # prepend -tc_diff zeros
+                int_pad = int(-tc_diff * 2048)
+                wave = np.pad(wave, [(0, 0), (int_pad, 0)])
+
+            # append any zeros needed, or crop after tc
+            end_diff = noise.shape[1] - wave.shape[1]
+            if end_diff > 0:
+                # append zeros
+                int_pad = int(end_diff)
+                wave = np.pad(wave, [(0, 0), (0, int_pad)])
+            else:
+                # crop final zeros
+                wave = wave[:, :-end_diff]
+
+            # inject
+            sample = noise.copy()
+            s_factor = np.round(np.random.uniform(self.s_min, self.s_max), 1)
+            sample += wave * s_factor
+
+            # label
+            # label = np.array([1, 0])
+            label = np.array([1])
+
+        else:
+            noise = self.slicer[item - self.n_slices][0, :, :]
+            sample = noise.copy()
+            # label = np.array([0, 1])
+            label = np.array([0])
+            abs_inj_time = -1
+            inj_time = -1
+            wave = np.zeros_like(sample)
+
+        return torch.from_numpy(sample).to(dtype=torch.float32), \
+               torch.from_numpy(label).to(dtype=torch.float32), \
+               abs_inj_time + inj_time

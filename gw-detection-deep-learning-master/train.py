@@ -80,36 +80,36 @@ def main(args):
     val_hdf = os.path.join(args.data_dir, f'dataset-{dataset}/v2/val_background_s24w6d1_1.hdf')
     val_npy = os.path.join(args.data_dir, f'dataset-{dataset}/v2/val_injections_s24w6d1_1.25s.npy')
     
-class Configs(object):
-	ab = 0
-	modes = 32
-	mode_select = 'random'
-	# version = 'Fourier'
-	version = 'Wavelets'
-	moving_avg = [12, 24]
-	L = 1
-	base = 'legendre'
-	cross_activation = 'tanh'
-	seq_len = 96
-	label_len = 48
-	pred_len = 96
-	output_attention = True
-	enc_in = 7
-	dec_in = 7
-	d_model = 16
-	embed = 'timeF'
-	dropout = 0.05
-	freq = 'h'
-	factor = 1
-	n_heads = 8
-	d_ff = 16
-	e_layers = 2
-	d_layers = 1
-	c_out = 7
-	activation = 'gelu'
-	wavelet = 0
+    class Configs(object):
+        ab = 0
+        modes = 32
+        mode_select = 'random'
+        # version = 'Fourier'
+        version = 'Wavelets'
+        moving_avg = [12, 24]
+        L = 1
+        base = 'legendre'
+        cross_activation = 'tanh'
+        seq_len = 96
+        label_len = 48
+        pred_len = 96
+        output_attention = True
+        enc_in = 7
+        dec_in = 7
+        d_model = 16
+        embed = 'timeF'
+        dropout = 0.05
+        freq = 'h'
+        factor = 1
+        n_heads = 8
+        d_ff = 16
+        e_layers = 2
+        d_layers = 1
+        c_out = 7
+        activation = 'gelu'
+        wavelet = 0
 
-configs = Configs()
+    configs = Configs()
 
     train_device = args.train_device
 

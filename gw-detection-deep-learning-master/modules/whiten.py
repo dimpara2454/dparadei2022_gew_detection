@@ -3,6 +3,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.fft import rfft, rfftfreq, irfft
+from torchaudio.transforms import MelSpectrogram
 
 
 def torch_inverse_spectrum_truncation(psd, max_filter_len, low_frequency_cutoff=9., delta_f=1.,
@@ -170,3 +171,72 @@ class CropWhitenNet(nn.Module):
             return self.net(segments_wh), added_time
         else:
             return self.net(segments_wh)
+
+
+class SpecCropWhitenNet(nn.Module):
+    def __init__(self, net=None, norm=None, deploy=False, m=0.625, l=0.5, f=15.):
+        super(SpecCropWhitenNet, self).__init__()
+        self.net = net
+        self.norm = norm
+        # self.whiten = Whiten(1/2048, low_frequency_cutoff=15, m=1.25)
+        self.whiten = Whiten(1/2048, low_frequency_cutoff=f, m=m, max_filter_len=l, legacy=False)
+        self.deploy = deploy
+        self.step = 0.1
+        self.spectrogram_transform = MelSpectrogram(n_fft=1024, win_length=64, hop_length=16,
+                                                    sample_rate=2048, f_min=4, f_max=256,
+                                                    n_mels=128)
+        self.dim = 128
+
+    def forward(self, x, inj_times=None):
+        segments_wh = []
+        # print(x.size())
+        n_batch = x.size(0)
+        slice_len = x.size(2)
+        if inj_times is not None:
+            # n_batch = training_samples.size(0)
+            for i, sample in enumerate(x):
+                with torch.no_grad():
+                    self.whiten.initialize(sample)
+                if inj_times[i] < 0:
+                    # crop random in (256, size(2) - 256) with 2560 duration
+                    if sample.size(1) > 2560:
+                        crop_idx = np.random.randint(sample.size(1) - 2560)
+                    else:
+                        crop_idx = 0
+                    segment = sample[:, crop_idx:crop_idx + 2560].unsqueeze_(0)
+                else:
+                    # crop around inj_time
+                    int_s = int(inj_times[i] // 1)
+                    crop_idx = int_s * 2048
+                    segment = sample[:, crop_idx:crop_idx + 2560].unsqueeze_(0)
+                segments_wh.append(self.whiten(segment)[:, :, 256:-256])
+            segments_wh = torch.cat(segments_wh)
+        else:
+            # crop for eval
+            segments_wh = []
+            with torch.no_grad():
+
+                c = x.size(1)
+                for i, sample in enumerate(x):
+                    self.whiten.initialize(sample)
+                    sample = sample.unsqueeze(0).unsqueeze(2)
+                    x_segments = F.unfold(sample, kernel_size=(1, 2560), stride=(1, 204)).contiguous()
+
+                    n = sample.size(0)
+                    l = x_segments.size(2)
+                    x_segments = x_segments.view(n, c, -1, l).permute(3, 1, 2, 0).squeeze_(3)
+
+                    segments_wh.append(self.whiten(x_segments)[:, :, 256:-256])
+                segments_wh = torch.cat(segments_wh)
+        specs_wh = self.spectrogram_transform(segments_wh)[:, :, :self.dim, :self.dim]
+        # specs_wh = Faudio.spectrogram(segments_wh, win_length=64, hop_length=16, n_fft=255, power=power, pad=0, window=torch.hann_window(64), normalized=False)[:, :, :self.dim, :self.dim]
+        # print(specs_wh.size())
+        if self.norm is not None:
+            specs_wh = self.norm(specs_wh)
+            # print(specs_wh.size())
+        if self.deploy:
+            added_time = torch.arange(0, slice_len / 2048. - 1.25 + self.step, self.step).repeat(n_batch)
+            # added_time = torch.ones(segments_wh.size(0))
+            return self.net(specs_wh), added_time
+        else:
+            return self.net(specs_wh)
