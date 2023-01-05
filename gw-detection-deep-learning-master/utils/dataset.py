@@ -499,7 +499,7 @@ class SlicerDataset7(Dataset):
         self.rel_inj_t = np.round(np.random.uniform(0.5, 0.7, self.n_slices), 3) + 0.125
         # self.injection_times = np.round(np.random.uniform(0, max_seg_idx - 1, self.n_slices), 1) + self.rel_inj_t
         self.injection_times = np.random.randint(0, max_seg_idx - 1, self.n_slices) + self.rel_inj_t
-        print(self.injection_times)
+        # print(self.injection_times)
 
     def __len__(self):
         return self.n_slices * 2

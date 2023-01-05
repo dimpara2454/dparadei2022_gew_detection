@@ -189,7 +189,7 @@ def main(args):
     validation_dataset = SlicerDataset7(val_hdf, val_npy, slice_len=int(args.slice_dur * sample_rate),
                                         slice_stride=int(args.slice_stride * sample_rate),
                                         max_seg_idx=int(np.floor(args.slice_dur)))
-    val_dl = DataLoader(validation_dataset, batch_size=100, shuffle=True, num_workers=args.num_workers,
+    val_dl = DataLoader(validation_dataset, batch_size=25, shuffle=True, num_workers=args.num_workers,
                         pin_memory=train_device)
 
     if train_network:
@@ -246,7 +246,7 @@ def main(args):
             total_val = 0
             correct_val = 0
 
-            for idx, (training_samples, training_labels, training_abs_inj_times, training_rel_inj_times) in enumerate(train_dl):
+            for idx, (training_samples, training_labels, training_abs_inj_times) in enumerate(train_dl):
                 training_samples = training_samples.to(device=train_device)
                 training_labels = training_labels.to(device=train_device)
 
@@ -255,7 +255,7 @@ def main(args):
                 if epoch < n_wrm:
                     wrm.step()
 
-                training_output = net(training_samples, training_abs_inj_times, training_rel_inj_times)
+                training_output = net(training_samples, training_abs_inj_times)
                 training_loss = loss(training_output, training_labels)
                 training_loss.backward()
                 # Clip gradients to make convergence somewhat easier
@@ -296,12 +296,12 @@ def main(args):
 
                 validation_running_loss = 0.
                 validation_batches = 0
-                for val_idx, (validation_samples, validation_labels, validation_abs_inj_times, validation_rel_inj_times) in enumerate(val_dl):
+                for val_idx, (validation_samples, validation_labels, validation_abs_inj_times) in enumerate(val_dl):
                     validation_samples = validation_samples.to(device=train_device)
                     validation_labels = validation_labels.to(device=train_device)
 
                     # Evaluation of a single validation batch
-                    validation_output = net(validation_samples, validation_abs_inj_times, validation_rel_inj_times)
+                    validation_output = net(validation_samples, validation_abs_inj_times)
                     validation_loss = loss(validation_output, validation_labels)
 
                     # get predictions & gt to measure accuracy
