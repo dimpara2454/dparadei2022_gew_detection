@@ -375,8 +375,8 @@ def main(args):
                 'val_losses': val_losses,
                 'train_accs': train_accs,
                 'val_accs': val_accs,
-                'val_pos_acc': positive_acc,
-                'val_neg_acc': negative_acc,
+                'val_pos_acc': positive_acc.cpu().item(),
+                'val_neg_acc': negative_acc.cpu().item(),
             }
             json.dump(train_dict, f)
 
