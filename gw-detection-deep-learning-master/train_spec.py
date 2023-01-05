@@ -402,6 +402,7 @@ if __name__ == '__main__':
     parser.add_argument('--slice-dur', type=float, default=3.25, help='Duration (in s) of original slices, e.g., 3.25.'
                                                                       'After the PSD is calculated these slices are further cropped to 1s.')
     parser.add_argument('--slice-stride', type=float, default=2., help='Slice stride.')
+    parser.add_argument('--suffix', type=str, default=None, help='plots suffix')
 
     training_group.add_argument('--resume-from', type=str, default=None, help='If set, weights will be loaded from this path and training will resume from these weights.')
     training_group.add_argument('--data-dir', type=str, default='', help='Path to directory containing dataset-1 folder')
