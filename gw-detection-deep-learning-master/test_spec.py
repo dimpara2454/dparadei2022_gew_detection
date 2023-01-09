@@ -19,7 +19,7 @@ delta_f = 1 / 1.25
 
 
 def main(args):
-    device = 'cuda:0' if torch.cuda.device_count() > 0 else 'cpu'
+    device = 'cuda:1' if torch.cuda.device_count() > 0 else 'cpu'
     # weights filename
     network_type = args.network_type
     if network_type == 'xcorr':
@@ -55,7 +55,7 @@ def main(args):
     cluster_threshold = 0.35
     var = 0.5
 
-    test_batch_size = 8
+    test_batch_size = 4
 
     with torch.no_grad():
         triggers = get_triggers(net,
