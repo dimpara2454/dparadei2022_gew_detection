@@ -6,7 +6,7 @@ import numpy as np
 np.random.seed(0)
 import h5py
 import json
-import pylab
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from bisect import bisect
 
@@ -349,7 +349,7 @@ def main(args):
         torch.save(net.state_dict(), weights_path)
 
         ### training plots
-        fig, axs = pylab.subplots(1, 2, sharex=True, figsize=(10, 5))
+        fig, axs = plt.subplots(1, 2, sharex=True, figsize=(10, 5))
         fig.suptitle('Training loss & acc')
         axs[0].plot(train_losses, label='train')
         axs[0].plot(val_losses, label='val')
