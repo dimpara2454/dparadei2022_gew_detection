@@ -350,12 +350,12 @@ class SlicerDataset(Dataset):
             sample[:, start_idx:end_idx] += wave[:, idx_shift:]
 
             # label
-            label = np.array([1, 0])
+            label = np.array([1.])
 
         else:
             noise = self.slicer[item - self.n_slices][0, :, :]
             sample = noise.copy()
-            label = np.array([0, 1])
+            label = np.array([0.])
             abs_inj_time = -1
             inj_time = -1
 
@@ -544,17 +544,17 @@ class SlicerDataset7(Dataset):
 
             # label
             # label = np.array([1, 0])
-            label = np.array([1])
+            label = np.array([1.])
 
         else:
             noise = self.slicer[item - self.n_slices][0, :, :]
             sample = noise.copy()
             # label = np.array([0, 1])
-            label = np.array([0])
+            label = np.array([0.])
             abs_inj_time = -1
             inj_time = -1
             wave = np.zeros_like(sample)
 
         return torch.from_numpy(sample).to(dtype=torch.float32), \
                torch.from_numpy(label).to(dtype=torch.float32), \
-               abs_inj_time + inj_time
+               abs_inj_time, inj_time

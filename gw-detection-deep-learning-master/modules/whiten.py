@@ -207,6 +207,7 @@ class SpecCropWhitenNet(nn.Module):
                 else:
                     # crop around inj_time
                     int_s = int(inj_times[i] // 1)
+                    # int_s = int(abs_inj_times[i] - inj_times[i])
                     crop_idx = int_s * 2048
                     segment = sample[:, crop_idx:crop_idx + 2560].unsqueeze_(0)
                 segments_wh.append(self.whiten(segment)[:, :, 256:-256])

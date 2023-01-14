@@ -6,7 +6,7 @@ import numpy as np
 np.random.seed(0)
 import h5py
 import json
-import pylab
+import matplotlib.pyplot as plt
 from tqdm import tqdm
 from bisect import bisect
 
@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from utils.dataset import SlicerDataset7
+from utils.dataset import SlicerDataset
 from utils.train_utils import WarmUpLR, initialize_xavier, progress_bar
 from modules.loss import reg_BCELoss
 from modules.resnet2d import ResNet18, ResNet50, ResNet8
@@ -156,7 +156,7 @@ def main(args):
     dataset = 4
 
     val_hdf = os.path.join(args.data_dir, f'dataset-{dataset}/v2/val_background_s24w6d1_1.hdf')
-    val_npy = os.path.join(args.data_dir, f'dataset-{dataset}/v2/val_injections_s24w6d1_8.25s_tc7.npy')
+    val_npy = os.path.join(args.data_dir, f'dataset-{dataset}/v2/val_injections_s24w6d1_1.25s.npy')
 
     train_device = args.train_device
     if network_type == 'xcorr':
@@ -186,7 +186,7 @@ def main(args):
     net.whiten.max_filter_len = 0.5
     net.whiten.legacy = False
 
-    validation_dataset = SlicerDataset7(val_hdf, val_npy, slice_len=int(args.slice_dur * sample_rate),
+    validation_dataset = SlicerDataset(val_hdf, val_npy, slice_len=int(args.slice_dur * sample_rate),
                                         slice_stride=int(args.slice_stride * sample_rate),
                                         max_seg_idx=int(np.floor(args.slice_dur)))
     val_dl = DataLoader(validation_dataset, batch_size=25, shuffle=True, num_workers=args.num_workers,
@@ -198,9 +198,9 @@ def main(args):
         background_hdf = os.path.join(args.data_dir, f'dataset-{dataset}/v2/train_background_s24w61w_1.hdf')
         injections_hdf = os.path.join(args.data_dir, f'dataset-{dataset}/v2/train_injections_s24w61w_1.hdf')
         injset = dataset if dataset != 3 else 4
-        inj_npy = os.path.join(args.data_dir, f'dataset-{injset}/v2/train_injections_s24w61w_8.25s_tc7.npy')
+        inj_npy = os.path.join(args.data_dir, f'dataset-{injset}/v2/train_injections_s24w61w_1.25s_all.npy')
 
-        training_dataset = SlicerDataset7(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
+        training_dataset = SlicerDataset(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
                                           slice_stride=int(args.slice_stride * sample_rate),
                                           max_seg_idx=int(np.floor(args.slice_dur)))
         batch_size = args.batch_size
@@ -349,7 +349,7 @@ def main(args):
         torch.save(net.state_dict(), weights_path)
 
         ### training plots
-        fig, axs = pylab.subplots(1, 2, sharex=True, figsize=(10, 5))
+        fig, axs = plt.subplots(1, 2, sharex=True, figsize=(10, 5))
         fig.suptitle('Training loss & acc')
         axs[0].plot(train_losses, label='train')
         axs[0].plot(val_losses, label='val')
