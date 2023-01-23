@@ -66,7 +66,8 @@ def main(args):
                                 verbose=True,
                                 batch_size=test_batch_size,
                                 whiten=False,
-                                slice_length=int(slice_dur * 2048))
+                                slice_length=int(slice_dur * 2048),
+                                num_workers=0)
 
     time, stat, var = get_clusters(triggers, cluster_threshold, var=var)
 
