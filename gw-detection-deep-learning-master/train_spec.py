@@ -165,7 +165,7 @@ def main(args):
     elif network_type == 'sepclass':
         base_model = SeparateClassificationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
         print(base_model)
-    elif network_type == 'joinclass':
+    elif network_type == 'jointclass':
         base_model = JointClassificationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
         print(base_model)
     else:
