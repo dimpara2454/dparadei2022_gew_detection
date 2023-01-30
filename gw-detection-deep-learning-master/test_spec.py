@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', type=str, help='Custom weights path.', default=None)
     parser.add_argument('--network-type', type=str,
                         help='Type of network to load.',
-                        default='xcorr', choices=['xcorr', 'speclass', 'jointclass'])
+                        default='xcorr', choices=['xcorr', 'sepclass', 'jointclass'])
     parser.add_argument('--resnet-type', type=str,
                         help='Type of resnet to use as feature extractor.',
                         default='resnet8', choices=['resnet8', 'resnet18', 'resnet50'])
