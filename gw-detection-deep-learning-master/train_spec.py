@@ -96,11 +96,11 @@ class SeparateClassificationModel(nn.Module):
     def __init__(self, resnet_type='resnet8'):
         super(SeparateClassificationModel, self).__init__()
         if resnet_type == 'resnet8':
-            self.feature_extractor = ResNet8(1, n_classes=1)
+            self.feature_extractor = ResNet8(1, n_classes=2)
         elif resnet_type == 'resnet18':
-            self.feature_extractor = ResNet18(1, n_classes=1)
+            self.feature_extractor = ResNet18(1, n_classes=2)
         elif resnet_type == 'resnet50':
-            self.feature_extractor = ResNet50(1, n_classes=1)
+            self.feature_extractor = ResNet50(1, n_classes=2)
         else:
             print("Unrecognized resnet_type, must be one of ['resnet8', 'resnet18', 'resnet50']")
             exit(0)
@@ -110,25 +110,25 @@ class SeparateClassificationModel(nn.Module):
         x2 = x[:, 1:, :, :]
         x1 = self.feature_extractor(x1)
         x2 = self.feature_extractor(x2)
-        return torch.sigmoid((x1 + x2) / 2.)
+        return torch.softmax((x1 + x2), dim=1)
 
 
 class JointClassificationModel(nn.Module):
     def __init__(self, resnet_type='resnet8'):
         super(JointClassificationModel, self).__init__()
         if resnet_type == 'resnet8':
-            self.feature_extractor = ResNet8(2, n_classes=1)
+            self.feature_extractor = ResNet8(2, n_classes=2)
         elif resnet_type == 'resnet18':
-            self.feature_extractor = ResNet18(2, n_classes=1)
+            self.feature_extractor = ResNet18(2, n_classes=2)
         elif resnet_type == 'resnet50':
-            self.feature_extractor = ResNet50(2, n_classes=1)
+            self.feature_extractor = ResNet50(2, n_classes=2)
         else:
             print("Unrecognized resnet_type, must be one of ['resnet8', 'resnet18', 'resnet50']")
             exit(0)
 
     def forward(self, x):
         out = self.feature_extractor(x)
-        return torch.sigmoid(out)
+        return torch.softmax(out, dim=1)
 
 
 # Set default weights filename
@@ -161,12 +161,15 @@ def main(args):
     train_device = args.train_device
     if network_type == 'xcorr':
         base_model = MyCorrelationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
+        n_classes = 1
         print(base_model)
     elif network_type == 'sepclass':
         base_model = SeparateClassificationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
+        n_classes = 2
         print(base_model)
     elif network_type == 'jointclass':
         base_model = JointClassificationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
+        n_classes = 2
         print(base_model)
     else:
         print("Unrecognized network_type, must be one of ['xcorr', 'sepclass', 'jointclass']")
@@ -188,7 +191,7 @@ def main(args):
 
     validation_dataset = SlicerDataset(val_hdf, val_npy, slice_len=int(args.slice_dur * sample_rate),
                                         slice_stride=int(args.slice_stride * sample_rate),
-                                        max_seg_idx=int(np.floor(args.slice_dur)))
+                                        max_seg_idx=int(np.floor(args.slice_dur)), n_classes=n_classes)
     val_dl = DataLoader(validation_dataset, batch_size=25, shuffle=True, num_workers=args.num_workers,
                         pin_memory=train_device)
 
@@ -202,7 +205,7 @@ def main(args):
 
         training_dataset = SlicerDataset(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
                                           slice_stride=int(args.slice_stride * sample_rate),
-                                          max_seg_idx=int(np.floor(args.slice_dur)))
+                                          max_seg_idx=int(np.floor(args.slice_dur)), n_classes=n_classes)
         batch_size = args.batch_size
         # DataLoaders handle efficient loading of the data into batches
         train_dl = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=args.num_workers,
@@ -264,8 +267,8 @@ def main(args):
                 opt.step()
 
                 # get predictions & gt to measure accuracy
-                predicted = (training_output > 0.5).float()
-                gt = training_labels
+                predicted = (training_output[:, 0] > 0.5).float()
+                gt = training_labels[:, 0]
                 total += training_output.size(0)
                 correct += predicted.eq(gt).sum().item()
                 train_acc = 100. * (correct / total)
@@ -307,8 +310,8 @@ def main(args):
                     # get predictions & gt to measure accuracy
                     # _, predicted_val = validation_output.max(1)
                     # _, gt_val = validation_labels.max(1)
-                    predicted_val = (validation_output > 0.5).float()
-                    gt_val = validation_labels
+                    predicted_val = (validation_output[:, 0] > 0.5).float()
+                    gt_val = validation_labels[:, 0]
                     total_val += validation_output.size(0)
                     correct_val += predicted_val.eq(gt_val).sum().item()
                     val_acc = 100. * (correct_val / total_val)

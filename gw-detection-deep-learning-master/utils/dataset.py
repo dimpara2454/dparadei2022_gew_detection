@@ -313,13 +313,15 @@ class SlicerDataset(Dataset):
     once as negative samples and once as positive samples, after injection.
     """
     def __init__(self, background_hdf, injections_npy, slice_len=int(3.25 * 2048), slice_stride=int(2.5 * 2048),
-                 max_seg_idx=3, return_time=True):
+                 max_seg_idx=3, return_time=True, n_classes=1):
         self.slicer = Slicer(background_hdf, step_size=slice_stride, window_size=slice_len)
         self.n_slices = len(self.slicer)
         self.waves = np.load(injections_npy, mmap_mode='r')
         self.n_waves = self.waves.shape[0]
         self.wave_indices = np.random.choice(self.n_waves, self.n_slices, replace=True)
         self.return_time = return_time
+
+        self.n_classes = n_classes
 
         print(f'Using {self.n_slices} background segments and {self.n_waves} waveforms...')
         self.n_pos = self.n_slices
@@ -350,12 +352,18 @@ class SlicerDataset(Dataset):
             sample[:, start_idx:end_idx] += wave[:, idx_shift:]
 
             # label
-            label = np.array([1.])
+            if self.n_classes == 1:
+                label = np.array([1.])
+            else:
+                label = np.array([1., 0.])
 
         else:
             noise = self.slicer[item - self.n_slices][0, :, :]
             sample = noise.copy()
-            label = np.array([0.])
+            if self.n_classes == 1:
+                label = np.array([0.])
+            else:
+                label = np.array([0., 1.])
             abs_inj_time = -1
             inj_time = -1
 
