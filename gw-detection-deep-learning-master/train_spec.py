@@ -23,7 +23,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 
-from utils.dataset import SlicerDataset
+from utils.dataset import SlicerDataset, SlicerDatasetSNR
 from utils.train_utils import WarmUpLR, initialize_xavier, progress_bar
 from modules.loss import reg_BCELoss
 from modules.resnet2d import ResNet18, ResNet50, ResNet8
@@ -47,7 +47,8 @@ def decode_snr_schedule(sch_str):
 
 
 def get_snr_by_epoch(sch_epochs, sch_ranges, epoch):
-    print(f'Epoch: {epoch}, schedule: {[(sch_epoch, sch_range) for sch_epoch, sch_range in zip(sch_epochs, sch_ranges)]}')
+    print(
+        f'Epoch: {epoch}, schedule: {[(sch_epoch, sch_range) for sch_epoch, sch_range in zip(sch_epochs, sch_ranges)]}')
     index = bisect(sch_epochs, epoch)
     if index >= len(sch_epochs):
         return sch_ranges[-1]
@@ -91,6 +92,26 @@ class MyCorrelationModel(nn.Module):
         # return self.bn(corr_norm).clip_(0, 1)
         return torch.sigmoid(corr_norm)
 
+class SimilarityModel(nn.Module):
+    def __init__(self, resnet_type='resnet8'):
+        super(SimilarityModel, self).__init__()
+        if resnet_type == 'resnet8':
+            self.feature_extractor = ResNet8(1, n_classes=1, fe_only=True)
+        elif resnet_type == 'resnet18':
+            self.feature_extractor = ResNet18(1, n_classes=1, fe_only=True)
+        elif resnet_type == 'resnet50':
+            self.feature_extractor = ResNet50(1, n_classes=1, fe_only=True)
+        else:
+            print("Unrecognized resnet_type, must be one of ['resnet8', 'resnet18', 'resnet50']")
+            exit(0)
+        self.conv_pool = nn.Conv2d(512, 128, 14, padding=0)
+
+    def forward(self, x):
+        x1 = x[:, :1, :, :]
+        x2 = x[:, 1:, :, :]
+        x1 = torch.flatten(self.conv_pool(self.feature_extractor(x1)), 1, 3)
+        x2 = torch.flatten(self.conv_pool(self.feature_extractor(x2)), 1, 3)
+        return torch.cosine_similarity(x1, x2, dim=1).unsqueeze_(1)
 
 class SeparateClassificationModel(nn.Module):
     def __init__(self, resnet_type='resnet8'):
@@ -163,6 +184,10 @@ def main(args):
         base_model = MyCorrelationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
         n_classes = 1
         print(base_model)
+    elif network_type == 'similarity':
+        base_model = SimilarityModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
+        n_classes = 1
+        print(base_model)
     elif network_type == 'sepclass':
         base_model = SeparateClassificationModel(resnet_type=args.resnet_type).to(train_device, dtype=dtype)
         n_classes = 2
@@ -172,7 +197,7 @@ def main(args):
         n_classes = 2
         print(base_model)
     else:
-        print("Unrecognized network_type, must be one of ['xcorr', 'sepclass', 'jointclass']")
+        print("Unrecognized network_type, must be one of ['xcorr', 'sepclass', 'jointclass', 'similarity']")
         exit(0)
 
     # norm = AdaptiveBatchNorm1d(2).to(train_device)
@@ -190,8 +215,8 @@ def main(args):
     net.whiten.legacy = False
 
     validation_dataset = SlicerDataset(val_hdf, val_npy, slice_len=int(args.slice_dur * sample_rate),
-                                        slice_stride=int(args.slice_stride * sample_rate),
-                                        max_seg_idx=int(np.floor(args.slice_dur)), n_classes=n_classes)
+                                       slice_stride=int(args.slice_stride * sample_rate),
+                                       max_seg_idx=int(np.floor(args.slice_dur)), n_classes=n_classes)
     val_dl = DataLoader(validation_dataset, batch_size=25, shuffle=True, num_workers=args.num_workers,
                         pin_memory=train_device)
 
@@ -203,9 +228,22 @@ def main(args):
         injset = dataset if dataset != 3 else 4
         inj_npy = os.path.join(args.data_dir, f'dataset-{injset}/v2/train_injections_s24w61w_1.25s_all.npy')
 
-        training_dataset = SlicerDataset(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
-                                          slice_stride=int(args.slice_stride * sample_rate),
-                                          max_seg_idx=int(np.floor(args.slice_dur)), n_classes=n_classes)
+        use_curriculum_learning = args.snr_schedule != ''
+        if use_curriculum_learning:
+            print('Using curriculum learning based on SNR difficulty...')
+            sch_epochs, sch_ranges = decode_snr_schedule(args.snr_schedule)
+            min_snr, max_snr = sch_ranges[0]
+            training_dataset = SlicerDatasetSNR(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
+                                                slice_stride=int(args.slice_stride * sample_rate),
+                                                max_seg_idx=int(np.floor(args.slice_dur)),
+                                                injections_hdf=injections_hdf, min_snr=min_snr, max_snr=max_snr,
+                                                p_augment=args.p_augment)
+        else:
+            print('No curriculum learning used...')
+            training_dataset = SlicerDataset(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
+                                             slice_stride=int(args.slice_stride * sample_rate),
+                                             max_seg_idx=int(np.floor(args.slice_dur)), n_classes=n_classes,
+                                             p_augment=args.p_augment)
         batch_size = args.batch_size
         # DataLoaders handle efficient loading of the data into batches
         train_dl = DataLoader(training_dataset, batch_size=batch_size, shuffle=True, num_workers=args.num_workers,
@@ -213,7 +251,7 @@ def main(args):
 
         # setup loss
         if args.loss == 'smooth':
-            loss = reg_BCELoss(dim=2)
+            loss = reg_BCELoss(dim=n_classes)
         else:
             loss = nn.BCELoss()
 
@@ -248,6 +286,10 @@ def main(args):
             # val accuracy
             total_val = 0
             correct_val = 0
+
+            if use_curriculum_learning:
+                s_min, s_max = get_snr_by_epoch(sch_epochs, sch_ranges, epoch)
+                training_dataset.set_snr_range(s_min, s_max)
 
             for idx, (training_samples, training_labels, training_abs_inj_times) in enumerate(train_dl):
                 training_samples = training_samples.to(device=train_device)
@@ -331,14 +373,15 @@ def main(args):
                     validation_batches += 1
                     progress_bar(val_idx, len(val_dl),
                                  f'Validation | Loss {validation_running_loss / validation_batches:.2f} | Acc {val_acc:.2f}'
-                                 f' (+:{100 * (positive_correct/positive_total):.3f}%,-:{100 * (negative_correct/negative_total):.3f}%)')
+                                 f' (+:{100 * (positive_correct / positive_total):.3f}%,-:{100 * (negative_correct / negative_total):.3f}%)')
 
             # Print information on the training and validation loss in the current epoch and save current network state
             validation_loss = validation_running_loss / validation_batches
             training_loss = training_running_loss / training_batches
             output_string = '%04i Train Loss: %f | Val Loss: %f || Train Acc: %.3f%% | Val Acc: %.3f%% (+:%.3f%%,-:%.3f%%)' % (
                 epoch, training_loss, validation_loss,
-                train_acc, val_acc, 100 * (positive_correct / positive_total), 100 * (negative_correct / negative_total))
+                train_acc, val_acc, 100 * (positive_correct / positive_total),
+                100 * (negative_correct / negative_total))
             train_losses.append(training_loss)
             val_losses.append(validation_loss)
             train_accs.append(train_acc)
@@ -398,7 +441,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output-dir', type=str, help="Path to the directory where the outputs will be stored.")
     parser.add_argument('--network-type', type=str,
                         help='Type of network to load.',
-                        default='xcorr', choices=['xcorr', 'sepclass', 'jointclass'])
+                        default='xcorr', choices=['xcorr', 'sepclass', 'jointclass', 'similarity'])
     parser.add_argument('--resnet-type', type=str,
                         help='Type of resnet to use as feature extractor.',
                         default='resnet8', choices=['resnet8', 'resnet18', 'resnet50'])
@@ -407,20 +450,31 @@ if __name__ == '__main__':
     parser.add_argument('--slice-stride', type=float, default=2., help='Slice stride.')
     parser.add_argument('--suffix', type=str, default=None, help='plots suffix')
 
-    training_group.add_argument('--resume-from', type=str, default=None, help='If set, weights will be loaded from this path and training will resume from these weights.')
-    training_group.add_argument('--data-dir', type=str, default='', help='Path to directory containing dataset-1 folder')
+    training_group.add_argument('--resume-from', type=str, default=None,
+                                help='If set, weights will be loaded from this path and training will resume from these weights.')
+    training_group.add_argument('--data-dir', type=str, default='',
+                                help='Path to directory containing dataset-1 folder')
     training_group.add_argument('--learning-rate', type=float, default=5e-5,
                                 help="Learning rate of the optimizer. Default: 0.00005")
-    training_group.add_argument('--lr-milestones', type=str, default='20,50', help='Epochs at which we multiply lr by gamma')
-    training_group.add_argument('--gamma', type=float, default=0.5, help='Rate to multiply learning rate by at milestones.')
-    training_group.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'sgd'], help='Type of optimizer.')
+    training_group.add_argument('--lr-milestones', type=str, default='20,50',
+                                help='Epochs at which we multiply lr by gamma')
+    training_group.add_argument('--gamma', type=float, default=0.5,
+                                help='Rate to multiply learning rate by at milestones.')
+    training_group.add_argument('--optimizer', type=str, default='adam', choices=['adam', 'sgd'],
+                                help='Type of optimizer.')
     training_group.add_argument('--epochs', type=int, default=10, help="Number of training epochs. Default: 10")
+    # try: --snr-schedule 4:12.5-100,2:8.5-100,2:1-8.5,2:1-12.5
+    training_group.add_argument('--snr-schedule', type=str, default='',
+                                help='Formatted string for waveform SNR filtering.'
+                                     'First number is epochs, then the range is separated by -')
     training_group.add_argument('--batch-size', type=int, default=32,
                                 help="Batch size of the training algorithm. Default: 32")
     training_group.add_argument('--warmup-epochs', type=float, default=0,
                                 help="If >0, the learning rate will be annealed from 1e-8 to learning rate in warmup_epochs")
     training_group.add_argument('--clip-norm', type=float, default=100.,
                                 help="Gradient clipping norm to stabilize the training. Default 100.")
+    training_group.add_argument('--p-augment', type=float, default=0,
+                                help="Percentage of samples where L1 noise is randomly replaced with different segment.")
     training_group.add_argument('--train-device', type=str, default='cpu',
                                 help="Device to train the network. Use 'cuda' for the GPU."
                                      "Also, 'cpu:0', 'cuda:1', etc. (zero-indexed). Default: cpu")

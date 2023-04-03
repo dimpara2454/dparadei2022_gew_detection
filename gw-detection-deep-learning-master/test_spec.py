@@ -8,7 +8,7 @@ from utils.eval_utils import get_triggers, get_clusters
 from modules.dain import DAIN_Layer
 from modules.whiten import CropWhitenNet, SpecCropWhitenNet
 from modules.resnet2d import ResNet8, ResNet18, ResNet50
-from train_spec import MyCorrelationModel, SeparateClassificationModel, JointClassificationModel
+from train_spec import MyCorrelationModel, SeparateClassificationModel, JointClassificationModel, SimilarityModel
 
 # Set data type to be used
 dtype = torch.float32
@@ -24,6 +24,9 @@ def main(args):
     network_type = args.network_type
     if network_type == 'xcorr':
         base_model = MyCorrelationModel(resnet_type=args.resnet_type).to(device, dtype=dtype)
+        print(base_model)
+    elif network_type == 'similarity':
+        base_model = SimilarityModel(resnet_type=args.resnet_type).to(device, dtype=dtype)
         print(base_model)
     elif network_type == 'sepclass':
         base_model = SeparateClassificationModel(resnet_type=args.resnet_type).to(device, dtype=dtype)
@@ -90,7 +93,7 @@ if __name__ == '__main__':
     parser.add_argument('--weights', type=str, help='Custom weights path.', default=None)
     parser.add_argument('--network-type', type=str,
                         help='Type of network to load.',
-                        default='xcorr', choices=['xcorr', 'sepclass', 'jointclass'])
+                        default='xcorr', choices=['xcorr', 'sepclass', 'jointclass', 'similarity'])
     parser.add_argument('--resnet-type', type=str,
                         help='Type of resnet to use as feature extractor.',
                         default='resnet8', choices=['resnet8', 'resnet18', 'resnet50'])

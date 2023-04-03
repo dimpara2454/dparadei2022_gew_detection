@@ -10,6 +10,6 @@ class reg_BCELoss(nn.BCELoss):
         self.regularization_B = 1. - epsilon * self.regularization_dim
 
     def forward(self, inputs, target, *args, **kwargs):
-        assert inputs.shape[-1] == self.regularization_dim
+        assert inputs.shape[-1] == self.regularization_dim, f"Input last shape: {inputs.shape[-1]} vs reguralization dim: {self.regularization_dim}"
         transformed_input = self.regularization_A + self.regularization_B * inputs
         return nn.BCELoss.forward(self, transformed_input, target, *args, **kwargs)

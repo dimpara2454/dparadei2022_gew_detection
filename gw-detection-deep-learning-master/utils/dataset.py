@@ -313,7 +313,7 @@ class SlicerDataset(Dataset):
     once as negative samples and once as positive samples, after injection.
     """
     def __init__(self, background_hdf, injections_npy, slice_len=int(3.25 * 2048), slice_stride=int(2.5 * 2048),
-                 max_seg_idx=3, return_time=True, n_classes=1):
+                 max_seg_idx=3, return_time=True, n_classes=1, p_augment=0):
         self.slicer = Slicer(background_hdf, step_size=slice_stride, window_size=slice_len)
         self.n_slices = len(self.slicer)
         self.waves = np.load(injections_npy, mmap_mode='r')
@@ -322,6 +322,7 @@ class SlicerDataset(Dataset):
         self.return_time = return_time
 
         self.n_classes = n_classes
+        self.p_augment = p_augment
 
         print(f'Using {self.n_slices} background segments and {self.n_waves} waveforms...')
         self.n_pos = self.n_slices
@@ -335,8 +336,13 @@ class SlicerDataset(Dataset):
         return self.n_pos + self.n_neg
 
     def __getitem__(self, item):
+        p_aug = np.random.uniform()
+        rand_item = np.random.randint(0, self.n_slices)
+
         if item < self.n_slices:
             noise = self.slicer[item][0, :, :]
+            if p_aug <= self.p_augment:
+                noise[1, :] = self.slicer[rand_item][0, 1, :]
             wave = self.waves[self.wave_indices[item]]
 
             # shift to (0.5, 0.7)
@@ -360,6 +366,8 @@ class SlicerDataset(Dataset):
         else:
             noise = self.slicer[item - self.n_slices][0, :, :]
             sample = noise.copy()
+            if p_aug <= self.p_augment:
+                sample[1, :] = self.slicer[rand_item][0, 1, :]
             if self.n_classes == 1:
                 label = np.array([0.])
             else:
@@ -470,12 +478,18 @@ class SlicerDatasetSNR(Dataset):
             sample[:, start_idx:end_idx] += wave[:, idx_shift:]
 
             # label
-            label = np.array([1, 0])
+            if self.n_classes == 1:
+                label = np.array([1.])
+            else:
+                label = np.array([1., 0.])
         else:
             sample = self.slicer[item - self.n_slices][0, :, :]
             if p_aug <= self.p_augment:
                 sample[1, :] = self.slicer[rand_item][0, 1, :]
-            label = np.array([0, 1])
+            if self.n_classes == 1:
+                label = np.array([0.])
+            else:
+                label = np.array([0., 1.])
             inj_time = -1
         if self.return_time:
             return torch.from_numpy(sample).to(dtype=torch.float32), \
