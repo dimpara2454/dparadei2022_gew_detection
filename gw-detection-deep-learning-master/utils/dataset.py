@@ -391,7 +391,7 @@ class SlicerDatasetSNR(Dataset):
     """
     def __init__(self, background_hdf, injections_npy, slice_len=int(3.25 * 2048), slice_stride=int(2.5 * 2048),
                  max_seg_idx=3, return_time=True, injections_hdf=None,
-                 min_snr=0, max_snr=None, p_augment=0.1):
+                 min_snr=0, max_snr=None, p_augment=0.1, n_classes=2):
         self.slicer = Slicer(background_hdf, step_size=slice_stride, window_size=slice_len)
         self.n_slices = len(self.slicer)
         self.waves = np.load(injections_npy, mmap_mode='r')
@@ -399,6 +399,7 @@ class SlicerDatasetSNR(Dataset):
 
         self.return_time = return_time
         self.p_augment = p_augment
+        self.n_classes = n_classes
 
         self.n_pos = int(1 * self.n_slices)
         self.n_neg = int(1 * self.n_slices)

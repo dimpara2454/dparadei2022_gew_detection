@@ -237,7 +237,7 @@ def main(args):
                                                 slice_stride=int(args.slice_stride * sample_rate),
                                                 max_seg_idx=int(np.floor(args.slice_dur)),
                                                 injections_hdf=injections_hdf, min_snr=min_snr, max_snr=max_snr,
-                                                p_augment=args.p_augment)
+                                                p_augment=args.p_augment, n_classes=n_classes)
         else:
             print('No curriculum learning used...')
             training_dataset = SlicerDataset(background_hdf, inj_npy, slice_len=int(args.slice_dur * sample_rate),
@@ -252,6 +252,8 @@ def main(args):
         # setup loss
         if args.loss == 'smooth':
             loss = reg_BCELoss(dim=n_classes)
+        elif args.loss == 'bcel':
+            loss = nn.BCEWithLogitsLoss()
         else:
             loss = nn.BCELoss()
 
@@ -480,7 +482,7 @@ if __name__ == '__main__':
                                      "Also, 'cpu:0', 'cuda:1', etc. (zero-indexed). Default: cpu")
     training_group.add_argument('--num-workers', type=int, default=8,
                                 help="Number of workers to use when loading training data. Default: 8")
-    training_group.add_argument('--loss', type=str, choices=['smooth', 'bce'], default='bce',
+    training_group.add_argument('--loss', type=str, choices=['smooth', 'bce', 'bcel'], default='bce',
                                 help="Type of loss function. Standard BCE, or label smoothing"
                                      "(e.g., 0.9 instead of 1, 0.1 instead of 0")
     args = parser.parse_args()
